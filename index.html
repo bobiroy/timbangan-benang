@@ -361,9 +361,16 @@
       </div>
 
       <div class="field">
-        <label for="parseRegex">Pola Cadangan (kalau field WT: tidak ditemukan)</label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="useManualPattern" style="width:auto;">
+          Gunakan pola manual di bawah (bukan otomatis dari field WT:)
+        </label>
+        <div class="hint">Biarkan tidak tercentang untuk timbangan ini — parsing WT: sudah otomatis. Centang hanya jika kamu ganti ke timbangan dengan format berbeda.</div>
+      </div>
+      <div class="field">
+        <label for="parseRegex">Pola Manual (dipakai hanya jika dicentang di atas)</label>
         <input type="text" id="parseRegex" value="(-?\d+\.?\d*)">
-        <div class="hint">Secara default berat diambil otomatis dari field <code>WT:</code> pada data timbangan. Pola ini hanya dipakai sebagai cadangan bila format timbangan berbeda.</div>
+        <div class="hint">Berat default diambil otomatis dari field <code>WT:</code> pada data timbangan.</div>
       </div>
 
       <button class="toggle-log" id="toggleLogBtn">Tampilkan data mentah ▾</button>
@@ -631,6 +638,12 @@ async function connect(){
       parity: $("parity").value,
     });
     setConnectedUI(true);
+    wtEverSeen = false;
+    stallWarnTimer = setTimeout(() => {
+      if (!wtEverSeen && !$("useManualPattern").checked){
+        readoutSource.textContent = "Belum ada field WT: terbaca — cek baud rate, atau centang pola manual";
+      }
+    }, 5000);
     readLoop();
   }catch(err){
     statusDot.className = "dot err";
@@ -640,6 +653,7 @@ async function connect(){
 
 async function disconnect(){
   keepReading = false;
+  if (stallWarnTimer){ clearTimeout(stallWarnTimer); stallWarnTimer = null; }
   try{
     if (reader){ await reader.cancel(); }
   }catch(e){}
@@ -661,28 +675,42 @@ async function disconnect(){
 const WT_REGEX     = /WT:(-?\d+\.?\d*)g/g;
 const STATUS_REGEX = /STATUS:(STEADY|UNSTEADY)/g;
 const BUFFER_CAP   = 20000; // characters; generous headroom for a few records
+let wtEverSeen = false;
+let stallWarnTimer = null;
 
 function processBuffer(buffer){
-  const wtMatches     = [...buffer.matchAll(WT_REGEX)];
-  const statusMatches = [...buffer.matchAll(STATUS_REGEX)];
+  // Manual mode: user explicitly opted out of the WT: auto-parser.
+  if ($("useManualPattern").checked){
+    let re;
+    try{ re = new RegExp($("parseRegex").value, "g"); }catch(e){ return buffer; }
+    const matches = [...buffer.matchAll(re)];
+    if (matches.length === 0){
+      return buffer.length > BUFFER_CAP ? buffer.slice(-BUFFER_CAP) : buffer;
+    }
+    for (const m of matches){
+      let val = parseFloat(m[1] !== undefined ? m[1] : m[0]);
+      if (isNaN(val)) continue;
+      if ($("unit").value === "kg") val *= 1000;
+      appendLog(m[0]);
+      setWeight(val, "timbangan (COM) — pola manual", null);
+    }
+    const last = matches[matches.length - 1];
+    return buffer.slice(last.index + last[0].length);
+  }
+
+  // Automatic mode: only ever act on a COMPLETE "WT:...g" field. If the
+  // buffer just hasn't received that part of the record yet, wait for more
+  // data rather than guessing from whatever numbers happen to be present.
+  const wtMatches = [...buffer.matchAll(WT_REGEX)];
 
   if (wtMatches.length === 0){
-    // Nothing recognizable yet (or a different scale format). Fall back to
-    // the manual override pattern from the settings panel as a last resort.
-    let fallback;
-    try{ fallback = new RegExp($("parseRegex").value); }catch(e){ return buffer; }
-    const m = buffer.match(fallback);
-    if (m){
-      let val = parseFloat(m[1]);
-      if (!isNaN(val)){
-        if ($("unit").value === "kg") val *= 1000;
-        setWeight(val, "timbangan (COM) — pola manual", null);
-      }
-      return "";
-    }
     return buffer.length > BUFFER_CAP ? buffer.slice(-BUFFER_CAP) : buffer;
   }
 
+  wtEverSeen = true;
+  if (stallWarnTimer){ clearTimeout(stallWarnTimer); stallWarnTimer = null; }
+
+  const statusMatches = [...buffer.matchAll(STATUS_REGEX)];
   for (let i = 0; i < wtMatches.length; i++){
     let val = parseFloat(wtMatches[i][1]);
     if (isNaN(val)) continue;
