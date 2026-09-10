@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Benang Scale Monitor</title>
+<style>
+  :root{
+    --bg: #E9ECEC;
+    --panel: #FFFFFF;
+    --panel-edge: #D3D8D8;
+    --ink: #1E2528;
+    --ink-soft: #5C6669;
+    --charcoal: #23292C;
+    --amber: #D98A1F;
+    --amber-dim: #F1C889;
+    --green: #1E7A46;
+    --green-bg: #E4F3EA;
+    --red: #B23A34;
+    --red-bg: #FBE7E5;
+    --mono: ui-monospace, SFMono-Regular, "IBM Plex Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    line-height:1.45;
+  }
+  header{
+    background:var(--charcoal);
+    color:#fff;
+    padding:18px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    border-bottom:4px solid var(--amber);
+  }
+  header .title{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  header .title h1{
+    font-size:19px;
+    margin:0;
+    font-weight:650;
+    letter-spacing:0.2px;
+  }
+  header .title span{
+    font-size:12px;
+    color:#B7BEC0;
+  }
+  .status-pill{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    padding:6px 12px;
+    border-radius:3px;
+    background:#2E3538;
+  }
+  .dot{
+    width:9px;height:9px;border-radius:50%;
+    background:#7A8386;
+    box-shadow:0 0 0 3px rgba(122,131,134,0.18);
+  }
+  .dot.live{background:#3CC26B;box-shadow:0 0 0 3px rgba(60,194,107,0.22);}
+  .dot.err{background:#E15B4F;box-shadow:0 0 0 3px rgba(225,91,79,0.22);}
+
+  main{
+    max-width:1180px;
+    margin:0 auto;
+    padding:26px 24px 60px;
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:20px;
+  }
+  @media (max-width:880px){
+    main{grid-template-columns:1fr;}
+  }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius:4px;
+    padding:20px;
+  }
+  .panel h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.7px;
+    color:var(--ink-soft);
+    margin:0 0 14px;
+    font-weight:650;
+    border-bottom:1px solid var(--panel-edge);
+    padding-bottom:8px;
+  }
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+  }
+  select, input[type=text], input[type=number]{
+    width:100%;
+    padding:9px 10px;
+    border:1px solid #C6CCCD;
+    border-radius:3px;
+    font-size:13.5px;
+    font-family:var(--sans);
+    background:#FCFCFB;
+    color:var(--ink);
+  }
+  select:focus, input:focus{outline:2px solid var(--amber-dim); outline-offset:1px;}
+
+  button{
+    font-family:var(--sans);
+    font-size:13.5px;
+    font-weight:600;
+    padding:10px 16px;
+    border-radius:3px;
+    border:1px solid transparent;
+    cursor:pointer;
+  }
+  .btn-primary{
+    background:var(--amber);
+    color:#221600;
+    width:100%;
+  }
+  .btn-primary:hover{background:#C67E14;}
+  .btn-primary:disabled{background:#E6D2AC; color:#8C7B54; cursor:not-allowed;}
+  .btn-secondary{
+    background:#fff;
+    border:1px solid #C6CCCD;
+    color:var(--ink);
+    width:100%;
+    margin-top:8px;
+  }
+  .btn-secondary:hover{background:#F3F4F3;}
+  .btn-secondary:disabled{opacity:0.5; cursor:not-allowed;}
+
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
+  fieldset{border:none; padding:0; margin:0;}
+  .hint{font-size:11.5px; color:var(--ink-soft); margin-top:5px;}
+
+  .readout-card{
+    background:var(--charcoal);
+    border-radius:4px;
+    padding:22px 26px;
+    color:#fff;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    margin-bottom:20px;
+  }
+  .readout-label{font-size:12px; color:#A9B1B3; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:8px;}
+  .readout-value{
+    font-family:var(--mono);
+    font-size:52px;
+    font-weight:600;
+    color:#3CC26B;
+    line-height:1;
+    letter-spacing:0.5px;
+  }
+  .readout-value.stale{color:#6B7377;}
+  .readout-unit{font-size:18px; color:#B7BEC0; margin-left:8px;}
+  .stability-badge{
+    display:inline-block;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.4px;
+    padding:3px 9px;
+    border-radius:20px;
+    margin-left:14px;
+    vertical-align:middle;
+    text-transform:uppercase;
+  }
+  .stability-badge.steady{background:rgba(60,194,107,0.18); color:#6FE39A;}
+  .stability-badge.unsteady{background:rgba(217,138,31,0.2); color:#F1B95C;}
+  .readout-meta{text-align:right; font-size:12.5px; color:#9AA3A5;}
+  .readout-meta div{margin-bottom:4px;}
+
+  .verdict{
+    border-radius:4px;
+    padding:20px 22px;
+    margin-bottom:20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .verdict.ok{background:var(--green-bg); border:1px solid #BEE0CB;}
+  .verdict.fail{background:var(--red-bg); border:1px solid #EFC5C1;}
+  .verdict.idle{background:#F1F2F2; border:1px solid var(--panel-edge);}
+  .verdict-text{font-size:20px; font-weight:700;}
+  .verdict.ok .verdict-text{color:var(--green);}
+  .verdict.fail .verdict-text{color:var(--red);}
+  .verdict.idle .verdict-text{color:var(--ink-soft); font-weight:600; font-size:15px;}
+  .verdict-sub{font-size:12.5px; color:var(--ink-soft); margin-top:3px;}
+  .verdict-limit{
+    font-family:var(--mono);
+    font-size:15px;
+    text-align:right;
+    color:var(--ink-soft);
+    white-space:nowrap;
+  }
+  .verdict-limit b{color:var(--ink); font-size:17px;}
+
+  .spec-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--panel-edge);
+    border:1px solid var(--panel-edge);
+    border-radius:4px;
+    overflow:hidden;
+    margin-bottom:22px;
+  }
+  .spec-cell{background:#fff; padding:14px 16px;}
+  .spec-cell .k{font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-soft); margin-bottom:5px;}
+  .spec-cell .v{font-family:var(--mono); font-size:16px; font-weight:600;}
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  thead th{
+    text-align:left;
+    background:#F1F2F1;
+    padding:9px 10px;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--panel-edge);
+    position:sticky; top:0;
+  }
+  tbody td{
+    padding:8px 10px;
+    border-bottom:1px solid #EEEFEE;
+    font-family:var(--mono);
+  }
+  tbody td:nth-child(2){font-family:var(--sans);}
+  tbody tr.active-row{background:#FDF4E4;}
+  tbody tr:hover{background:#F7F8F7;}
+  .table-wrap{max-height:340px; overflow:auto; border:1px solid var(--panel-edge); border-radius:4px;}
+
+  .log-box{
+    font-family:var(--mono);
+    font-size:11.5px;
+    background:#181C1E;
+    color:#8FE3A8;
+    padding:10px 12px;
+    border-radius:4px;
+    height:110px;
+    overflow-y:auto;
+    white-space:pre-wrap;
+    word-break:break-all;
+    margin-top:8px;
+  }
+  .toggle-log{
+    background:none; border:none; color:var(--ink-soft);
+    font-size:12px; cursor:pointer; padding:0; margin-top:10px;
+    text-decoration:underline;
+  }
+  .banner{
+    background:#FDF4E4;
+    border:1px solid #EFD9A6;
+    color:#6B4E11;
+    font-size:12.5px;
+    padding:10px 14px;
+    border-radius:4px;
+    margin-bottom:20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>Benang Scale Monitor</h1>
+    <span>Timbangan RS-232 &rarr; Cek Sisa Benang</span>
+  </div>
+  <div class="status-pill">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">Belum Terhubung</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- LEFT: connection + selection controls -->
+  <div>
+    <div class="panel" style="margin-bottom:20px;">
+      <h2>Koneksi Timbangan</h2>
+
+      <div id="notSupportedBanner" class="banner" style="display:none;">
+        Browser ini belum mendukung Web Serial API. Buka halaman ini dengan
+        <b>Google Chrome</b> atau <b>Microsoft Edge</b> versi terbaru, dan pastikan
+        halaman diakses lewat <code>http://localhost</code> atau <code>https://</code>
+        (bukan langsung dibuka sebagai file).
+      </div>
+
+      <button class="btn-primary" id="btnConnect">Sambungkan ke Port COM</button>
+      <button class="btn-secondary" id="btnDisconnect" disabled>Putuskan Sambungan</button>
+
+      <div class="field" style="margin-top:16px;">
+        <label for="baudRate">Baud Rate</label>
+        <select id="baudRate">
+          <option value="1200">1200</option>
+          <option value="2400">2400</option>
+          <option value="4800">4800</option>
+          <option value="9600" selected>9600</option>
+          <option value="19200">19200</option>
+          <option value="38400">38400</option>
+          <option value="57600">57600</option>
+          <option value="115200">115200</option>
+        </select>
+        <div class="hint">Cocokkan dengan setting port pada timbangan.</div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label for="dataBits">Data Bits</label>
+          <select id="dataBits">
+            <option value="7">7</option>
+            <option value="8" selected>8</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="stopBits">Stop Bits</label>
+          <select id="stopBits">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="parity">Parity</label>
+        <select id="parity">
+          <option value="none" selected>None</option>
+          <option value="even">Even</option>
+          <option value="odd">Odd</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="unit">Satuan Output Timbangan</label>
+        <select id="unit">
+          <option value="g" selected>Gram (g)</option>
+          <option value="kg">Kilogram (kg)</option>
+        </select>
+        <div class="hint">Tabel referensi dalam gram, dikonversi otomatis bila timbangan kirim kg.</div>
+      </div>
+
+      <div class="field">
+        <label for="parseRegex">Pola Cadangan (kalau field WT: tidak ditemukan)</label>
+        <input type="text" id="parseRegex" value="(-?\d+\.?\d*)">
+        <div class="hint">Secara default berat diambil otomatis dari field <code>WT:</code> pada data timbangan. Pola ini hanya dipakai sebagai cadangan bila format timbangan berbeda.</div>
+      </div>
+
+      <button class="toggle-log" id="toggleLogBtn">Tampilkan data mentah ▾</button>
+      <div class="log-box" id="logBox" style="display:none;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Mode Manual (Tanpa Alat)</h2>
+      <div class="field">
+        <label for="manualWeight">Input Berat Manual (gram)</label>
+        <input type="number" id="manualWeight" placeholder="mis. 75">
+      </div>
+      <button class="btn-secondary" id="btnManualApply" style="margin-top:0;">Gunakan Nilai Ini</button>
+      <div class="hint">Berguna untuk uji coba tampilan sebelum timbangan tersambung.</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: live readout + thread selection + verdict + table -->
+  <div>
+
+    <div class="field" style="max-width:520px;">
+      <label for="threadSelect">Pilih Jenis Benang (Item Code)</label>
+      <select id="threadSelect"></select>
+    </div>
+
+    <div class="readout-card">
+      <div>
+        <div class="readout-label">Berat Terbaca</div>
+        <div>
+          <span class="readout-value stale" id="readoutValue">—</span>
+          <span class="readout-unit">gram</span>
+          <span class="stability-badge" id="stabilityBadge"></span>
+        </div>
+      </div>
+      <div class="readout-meta">
+        <div id="readoutSource">Sumber: menunggu data</div>
+        <div id="readoutTime">Terakhir update: —</div>
+      </div>
+    </div>
+
+    <div class="verdict idle" id="verdictBox">
+      <div>
+        <div class="verdict-text" id="verdictText">Pilih jenis benang dan sambungkan timbangan untuk melihat hasil</div>
+        <div class="verdict-sub" id="verdictSub"></div>
+      </div>
+      <div class="verdict-limit" id="verdictLimit"></div>
+    </div>
+
+    <div class="spec-grid" id="specGrid"></div>
+
+    <h2 style="font-size:12px; text-transform:uppercase; letter-spacing:0.7px; color:var(--ink-soft); margin:0 0 10px; font-weight:650;">
+      Tabel Referensi Benang
+    </h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Item Code</th>
+            <th>Berat (g)</th>
+            <th>Panjang (m)</th>
+            <th>Kategori</th>
+            <th>Cons (g)</th>
+            <th>+Cons (g)</th>
+            <th>Limit 50% (g)</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+// ---------------------------------------------------------------
+// 1. Reference data, transcribed from the provided thread table
+// ---------------------------------------------------------------
+const THREADS = [
+  {no:1,  code:"WILDCAT 160-MINT GREEN V82066-00", weight:97,  length:5000, category:"TEX 18, TXT 160", cons:18, weightWithCons:115, limit50:66.5},
+  {no:2,  code:"SABATEX SOFT ECOVERDE 120-095A-00", weight:95,  length:5000, category:"TEX 18, TXT 120", cons:14, weightWithCons:109, limit50:61.5},
+  {no:3,  code:"EPIC ECOVERDE AS 120-095A-00",       weight:95,  length:5000, category:"TEX 24, TXT 120", cons:14, weightWithCons:109, limit50:61.5},
+  {no:4,  code:"SEAMSOFT ECOVERDE 160-AECV-00",      weight:101, length:5000, category:"TEX 18, TXT 160", cons:14, weightWithCons:115, limit50:64.5},
+  {no:5,  code:"EPIC ECOVERDE 50-HD106-00",          weight:311, length:5000, category:"TEX 60, TXT 50",  cons:14, weightWithCons:325, limit50:169.5},
+  {no:6,  code:"SABATEX 120-SPORT ROYAL 61659-00",   weight:91,  length:5000, category:"TEX 18, TXT 120", cons:14, weightWithCons:105, limit50:59.5},
+  {no:7,  code:"GRAMAX ECOVERDE 160-A6WF-00",        weight:94,  length:5000, category:"TEX 18, TXT 160", cons:14, weightWithCons:108, limit50:61},
+  {no:8,  code:"SABA ECOVERDE 120-A0QE-00",          weight:151, length:5000, category:"TEX 24, TXT 120", cons:14, weightWithCons:165, limit50:89.5},
+  {no:9,  code:"EPIC ECOVERDE 80-48F0-00",           weight:218, length:5000, category:"TEX 40, TXT 80",  cons:14, weightWithCons:232, limit50:123},
+  {no:10, code:"EPIC ECOVERDE 025-001A-00",          weight:156, length:2000, category:"TEX 120, TXT 25", cons:14, weightWithCons:170, limit50:92},
+  {no:11, code:"EPIC ECOVERDE 100-54F0-00",          weight:169, length:5000, category:"TEX 30, TXT 100", cons:14, weightWithCons:183, limit50:98.5},
+  {no:12, code:"ELOFLEX 120-095A-00",                weight:121, length:3000, category:"TEX 27, TXT 120", cons:18, weightWithCons:139, limit50:78.5},
+  {no:13, code:"ANESOFT ECO 160-095A-00",            weight:87,  length:5000, category:"TEX 18, TXT 160", cons:18, weightWithCons:105, limit50:61.5},
+  {no:14, code:"PERMACORE 120-AA35-00",              weight:146, length:5000, category:"TEX 24, TXT 120", cons:14, weightWithCons:160, limit50:87},
+  {no:15, code:"SABAFLEX 120-AJ34-00",               weight:51,  length:1500, category:"TEX 27, TXT 120", cons:14, weightWithCons:65,  limit50:39.5},
+  {no:16, code:"EPIC ECOVERDE 20-AA2T-00",           weight:153, length:1000, category:"TEX 135, TXT 20", cons:14, weightWithCons:167, limit50:90.5},
+];
+
+// ---------------------------------------------------------------
+// 2. State
+// ---------------------------------------------------------------
+let port = null;
+let reader = null;
+let keepReading = false;
+let selectedThread = THREADS[0];
+let lastWeightGram = null;
+let lastStability = null; // "STEADY" | "UNSTEADY" | null
+
+// ---------------------------------------------------------------
+// 3. DOM refs
+// ---------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const threadSelect   = $("threadSelect");
+const tableBody      = $("tableBody");
+const specGrid       = $("specGrid");
+const verdictBox     = $("verdictBox");
+const verdictText    = $("verdictText");
+const verdictSub     = $("verdictSub");
+const verdictLimit   = $("verdictLimit");
+const readoutValue   = $("readoutValue");
+const readoutSource  = $("readoutSource");
+const readoutTime    = $("readoutTime");
+const statusDot      = $("statusDot");
+const statusText     = $("statusText");
+const btnConnect     = $("btnConnect");
+const btnDisconnect  = $("btnDisconnect");
+const logBox         = $("logBox");
+const toggleLogBtn   = $("toggleLogBtn");
+
+// ---------------------------------------------------------------
+// 4. Populate thread dropdown + reference table
+// ---------------------------------------------------------------
+function populateThreads(){
+  threadSelect.innerHTML = THREADS.map(t =>
+    `<option value="${t.no}">${t.no}. ${t.code}</option>`
+  ).join("");
+
+  tableBody.innerHTML = THREADS.map(t => `
+    <tr data-no="${t.no}">
+      <td>${t.no}</td>
+      <td>${t.code}</td>
+      <td>${t.weight}</td>
+      <td>${t.length}</td>
+      <td style="font-family:var(--sans);">${t.category}</td>
+      <td>${t.cons}</td>
+      <td>${t.weightWithCons}</td>
+      <td>${t.limit50}</td>
+    </tr>
+  `).join("");
+}
+
+function highlightActiveRow(){
+  [...tableBody.querySelectorAll("tr")].forEach(row => {
+    row.classList.toggle("active-row", Number(row.dataset.no) === selectedThread.no);
+  });
+}
+
+function renderSpecGrid(){
+  specGrid.innerHTML = `
+    <div class="spec-cell"><div class="k">Kategori</div><div class="v">${selectedThread.category}</div></div>
+    <div class="spec-cell"><div class="k">Panjang</div><div class="v">${selectedThread.length} m</div></div>
+    <div class="spec-cell"><div class="k">Berat Awal + Cons</div><div class="v">${selectedThread.weightWithCons} g</div></div>
+  `;
+}
+
+threadSelect.addEventListener("change", () => {
+  selectedThread = THREADS.find(t => t.no === Number(threadSelect.value));
+  highlightActiveRow();
+  renderSpecGrid();
+  evaluate();
+});
+
+// ---------------------------------------------------------------
+// 5. Verdict logic
+// ---------------------------------------------------------------
+function evaluate(){
+  const limit = selectedThread.limit50;
+  verdictLimit.innerHTML = `Batas 50%<br><b>${limit} g</b>`;
+
+  if (lastWeightGram === null){
+    verdictBox.className = "verdict idle";
+    verdictText.textContent = "Menunggu data berat";
+    verdictSub.textContent = `Benang terpilih: ${selectedThread.code}`;
+    return;
+  }
+
+  const usable = lastWeightGram > limit;
+  verdictBox.className = "verdict " + (usable ? "ok" : "fail");
+  verdictText.textContent = usable ? "Benang dapat Digunakan" : "Tidak dapat Digunakan";
+  let sub = `${lastWeightGram.toFixed(2)} g terbaca — batas 50% untuk ${selectedThread.code} adalah ${limit} g`;
+  if (lastStability === "UNSTEADY"){
+    sub += " (menunggu timbangan stabil...)";
+  }
+  verdictSub.textContent = sub;
+}
+
+const stabilityBadge = $("stabilityBadge");
+
+function setWeight(grams, source, stability){
+  lastWeightGram = grams;
+  lastStability = stability || null;
+  readoutValue.textContent = grams.toFixed(2);
+  readoutValue.classList.remove("stale");
+  readoutSource.textContent = "Sumber: " + source;
+  readoutTime.textContent = "Terakhir update: " + new Date().toLocaleTimeString("id-ID");
+
+  if (lastStability === "STEADY"){
+    stabilityBadge.textContent = "Stabil";
+    stabilityBadge.className = "stability-badge steady";
+  } else if (lastStability === "UNSTEADY"){
+    stabilityBadge.textContent = "Belum Stabil";
+    stabilityBadge.className = "stability-badge unsteady";
+  } else {
+    stabilityBadge.textContent = "";
+    stabilityBadge.className = "stability-badge";
+  }
+  evaluate();
+}
+
+// ---------------------------------------------------------------
+// 6. Manual mode
+// ---------------------------------------------------------------
+$("btnManualApply").addEventListener("click", () => {
+  const val = parseFloat($("manualWeight").value);
+  if (!isNaN(val)){
+    setWeight(val, "input manual");
+  }
+});
+
+// ---------------------------------------------------------------
+// 7. Raw log toggle
+// ---------------------------------------------------------------
+toggleLogBtn.addEventListener("click", () => {
+  const visible = logBox.style.display !== "none";
+  logBox.style.display = visible ? "none" : "block";
+  toggleLogBtn.textContent = visible ? "Tampilkan data mentah ▾" : "Sembunyikan data mentah ▴";
+});
+
+function appendLog(line){
+  logBox.textContent += line + "\n";
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+// ---------------------------------------------------------------
+// 8. Web Serial connection
+// ---------------------------------------------------------------
+function setConnectedUI(connected){
+  statusDot.className = "dot " + (connected ? "live" : "");
+  statusText.textContent = connected ? "Terhubung" : "Belum Terhubung";
+  btnConnect.disabled = connected;
+  btnDisconnect.disabled = !connected;
+}
+
+async function connect(){
+  if (!("serial" in navigator)){
+    $("notSupportedBanner").style.display = "block";
+    return;
+  }
+  try{
+    port = await navigator.serial.requestPort();
+    await port.open({
+      baudRate: Number($("baudRate").value),
+      dataBits: Number($("dataBits").value),
+      stopBits: Number($("stopBits").value),
+      parity: $("parity").value,
+    });
+    setConnectedUI(true);
+    readLoop();
+  }catch(err){
+    statusDot.className = "dot err";
+    statusText.textContent = "Gagal: " + err.message;
+  }
+}
+
+async function disconnect(){
+  keepReading = false;
+  try{
+    if (reader){ await reader.cancel(); }
+  }catch(e){}
+  try{
+    if (port){ await port.close(); }
+  }catch(e){}
+  port = null;
+  setConnectedUI(false);
+}
+
+// This scale streams one continuous run of labeled fields with NO line
+// breaks, e.g.:
+//   BAT:6.4V(EXT) MODE:COUNT REF:1000.00g STATUS:STEADY ... WT:219.82g ...
+// so splitting on \r\n never fires and naive "first number in the text"
+// parsing grabs the wrong field (REF, UW, etc). Instead we search the raw
+// buffer directly for the WT: (weight) and STATUS: fields by name, process
+// every complete record found, then discard the consumed portion of the
+// buffer so it never grows unbounded.
+const WT_REGEX     = /WT:(-?\d+\.?\d*)g/g;
+const STATUS_REGEX = /STATUS:(STEADY|UNSTEADY)/g;
+const BUFFER_CAP   = 20000; // characters; generous headroom for a few records
+
+function processBuffer(buffer){
+  const wtMatches     = [...buffer.matchAll(WT_REGEX)];
+  const statusMatches = [...buffer.matchAll(STATUS_REGEX)];
+
+  if (wtMatches.length === 0){
+    // Nothing recognizable yet (or a different scale format). Fall back to
+    // the manual override pattern from the settings panel as a last resort.
+    let fallback;
+    try{ fallback = new RegExp($("parseRegex").value); }catch(e){ return buffer; }
+    const m = buffer.match(fallback);
+    if (m){
+      let val = parseFloat(m[1]);
+      if (!isNaN(val)){
+        if ($("unit").value === "kg") val *= 1000;
+        setWeight(val, "timbangan (COM) — pola manual", null);
+      }
+      return "";
+    }
+    return buffer.length > BUFFER_CAP ? buffer.slice(-BUFFER_CAP) : buffer;
+  }
+
+  for (let i = 0; i < wtMatches.length; i++){
+    let val = parseFloat(wtMatches[i][1]);
+    if (isNaN(val)) continue;
+    if ($("unit").value === "kg") val *= 1000;
+    const status = statusMatches[i] ? statusMatches[i][1] : null;
+    appendLog(`WT:${wtMatches[i][1]}g  STATUS:${status || "-"}`);
+    setWeight(val, "timbangan (COM)", status);
+  }
+
+  // Drop everything up through the last fully-parsed WT field; keep any
+  // trailing partial record for the next chunk to complete.
+  const last = wtMatches[wtMatches.length - 1];
+  return buffer.slice(last.index + last[0].length);
+}
+
+async function readLoop(){
+  keepReading = true;
+  const textDecoder = new TextDecoderStream();
+  const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+  reader = textDecoder.readable.getReader();
+
+  let buffer = "";
+
+  while (keepReading){
+    try{
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value){
+        buffer += value;
+        if (buffer.length > BUFFER_CAP) buffer = buffer.slice(-BUFFER_CAP);
+        buffer = processBuffer(buffer);
+      }
+    }catch(err){
+      appendLog("[error] " + err.message);
+      break;
+    }
+  }
+
+  try{ reader.releaseLock(); }catch(e){}
+}
+
+btnConnect.addEventListener("click", connect);
+btnDisconnect.addEventListener("click", disconnect);
+
+// ---------------------------------------------------------------
+// 9. Init
+// ---------------------------------------------------------------
+if (!("serial" in navigator)){
+  $("notSupportedBanner").style.display = "block";
+}
+populateThreads();
+highlightActiveRow();
+renderSpecGrid();
+evaluate();
+</script>
+
+</body>
+</html>
