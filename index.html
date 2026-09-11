@@ -285,6 +285,75 @@
   tbody tr:hover{background:#F7F8F7;}
   .table-wrap{max-height:340px; overflow:auto; border:1px solid var(--panel-edge); border-radius:4px;}
 
+  /* Reference table — distinct, more polished treatment */
+  .ref-panel{padding:22px 22px 10px;}
+  .panel-table-head{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .ref-subcount{font-size:12px; color:var(--ink-soft); margin-top:4px;}
+  .search-input{
+    width:230px;
+    padding:8px 12px;
+    border:1px solid #C6CCCD;
+    border-radius:20px;
+    font-size:12.5px;
+    background:#F7F8F7 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%235C6669" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>') no-repeat 10px center;
+    padding-left:32px;
+  }
+  .ref-table-wrap{
+    max-height:420px;
+    border-radius:6px;
+    border:1px solid var(--panel-edge);
+    box-shadow:0 1px 2px rgba(30,37,40,0.05);
+  }
+  .ref-table thead th{
+    background:var(--charcoal);
+    color:#C8CDCE;
+    font-size:10.5px;
+    letter-spacing:0.6px;
+    padding:11px 12px;
+    border-bottom:none;
+    box-shadow:0 1px 0 rgba(0,0,0,0.15);
+  }
+  .ref-table thead th.num{text-align:right;}
+  .ref-table tbody td{
+    padding:10px 12px;
+    font-size:12.5px;
+  }
+  .ref-table tbody td.num{
+    text-align:right;
+    font-variant-numeric:tabular-nums;
+  }
+  .ref-table tbody tr:nth-child(even){background:#F7F8F8;}
+  .ref-table tbody tr:nth-child(even):hover{background:#EFF2F1;}
+  .ref-table tbody tr:hover{background:#F1F4F3;}
+  .ref-table tbody tr.active-row{background:#FDF4E4 !important; box-shadow:inset 3px 0 0 var(--amber);}
+  .ref-table tbody td:first-child{color:var(--ink-soft); font-size:11.5px;}
+  .ref-table tbody td.limit-cell{font-weight:700; color:var(--ink);}
+  .ref-cat-pill{
+    display:inline-block;
+    font-family:var(--sans);
+    font-size:11px;
+    font-weight:600;
+    padding:3px 9px;
+    border-radius:20px;
+    background:#E7EBEA;
+    color:#3E4749;
+    white-space:nowrap;
+  }
+  .ref-no-results{
+    text-align:center;
+    padding:24px 10px;
+    color:var(--ink-soft);
+    font-family:var(--sans);
+    font-size:12.5px;
+  }
+
   .log-box{
     font-family:var(--mono);
     font-size:11.5px;
@@ -481,25 +550,31 @@
       </div>
     </div>
 
-    <h2 style="font-size:12px; text-transform:uppercase; letter-spacing:0.7px; color:var(--ink-soft); margin:0 0 10px; font-weight:650;">
-      Tabel Referensi Benang
-    </h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Item Code</th>
-            <th>Berat (g)</th>
-            <th>Panjang (m)</th>
-            <th>Kategori</th>
-            <th>Cons (g)</th>
-            <th>+Cons (g)</th>
-            <th>Limit 50% (g)</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+    <div class="panel ref-panel">
+      <div class="panel-table-head">
+        <div>
+          <h2 style="margin:0; border:none; padding:0;">Tabel Referensi Benang</h2>
+          <div class="ref-subcount"><span id="refCount">16</span> jenis benang terdaftar</div>
+        </div>
+        <input type="text" id="refSearch" class="search-input" placeholder="Cari kode atau kategori...">
+      </div>
+      <div class="table-wrap ref-table-wrap">
+        <table class="ref-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Item Code</th>
+              <th class="num">Berat (g)</th>
+              <th class="num">Panjang (m)</th>
+              <th>Kategori</th>
+              <th class="num">Cons (g)</th>
+              <th class="num">+Cons (g)</th>
+              <th class="num">Limit 50% (g)</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
     </div>
 
   </div>
@@ -567,20 +642,37 @@ function populateThreads(){
   threadSelect.innerHTML = THREADS.map(t =>
     `<option value="${t.no}">${t.no}. ${t.code}</option>`
   ).join("");
+}
 
-  tableBody.innerHTML = THREADS.map(t => `
+function renderRefTable(filterText){
+  const f = (filterText || "").trim().toLowerCase();
+  const filtered = f
+    ? THREADS.filter(t => t.code.toLowerCase().includes(f) || t.category.toLowerCase().includes(f))
+    : THREADS;
+
+  $("refCount").textContent = filtered.length;
+
+  if (filtered.length === 0){
+    tableBody.innerHTML = `<tr><td colspan="8" class="ref-no-results">Tidak ada benang yang cocok dengan pencarian "${filterText}"</td></tr>`;
+    return;
+  }
+
+  tableBody.innerHTML = filtered.map(t => `
     <tr data-no="${t.no}">
       <td>${t.no}</td>
       <td>${t.code}</td>
-      <td>${t.weight}</td>
-      <td>${t.length}</td>
-      <td style="font-family:var(--sans);">${t.category}</td>
-      <td>${t.cons}</td>
-      <td>${t.weightWithCons}</td>
-      <td>${t.limit50}</td>
+      <td class="num">${t.weight}</td>
+      <td class="num">${t.length}</td>
+      <td><span class="ref-cat-pill">${t.category}</span></td>
+      <td class="num">${t.cons}</td>
+      <td class="num">${t.weightWithCons}</td>
+      <td class="num limit-cell">${t.limit50}</td>
     </tr>
   `).join("");
+  highlightActiveRow();
 }
+
+$("refSearch").addEventListener("input", (e) => renderRefTable(e.target.value));
 
 function highlightActiveRow(){
   [...tableBody.querySelectorAll("tr")].forEach(row => {
@@ -919,6 +1011,7 @@ if (!("serial" in navigator)){
   $("notSupportedBanner").style.display = "block";
 }
 populateThreads();
+renderRefTable();
 highlightActiveRow();
 renderSpecGrid();
 evaluate();
