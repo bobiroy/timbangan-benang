@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Benang Scale Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg: #E9ECEC;
@@ -211,6 +212,39 @@
   }
   .verdict-limit b{color:var(--ink); font-size:17px;}
 
+  .save-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-bottom:20px;
+  }
+  .save-confirm{
+    font-size:12.5px;
+    color:var(--green);
+    font-weight:600;
+    opacity:0;
+    transition:opacity 0.2s;
+  }
+  .save-confirm.show{opacity:1;}
+  .kategori-pill{
+    display:inline-block;
+    font-size:11.5px;
+    font-weight:700;
+    padding:3px 9px;
+    border-radius:20px;
+  }
+  .kategori-pill.memenuhi{background:var(--green-bg); color:var(--green);}
+  .kategori-pill.tidak{background:var(--red-bg); color:var(--red);}
+  .row-delete{
+    background:none;
+    border:none;
+    color:var(--ink-soft);
+    cursor:pointer;
+    font-size:15px;
+    padding:0 4px;
+  }
+  .row-delete:hover{color:var(--red);}
+
   .spec-grid{
     display:grid;
     grid-template-columns:repeat(3,1fr);
@@ -360,20 +394,7 @@
         <div class="hint">Tabel referensi dalam gram, dikonversi otomatis bila timbangan kirim kg.</div>
       </div>
 
-      <div class="field">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-          <input type="checkbox" id="useManualPattern" style="width:auto;">
-          Gunakan pola manual di bawah (bukan otomatis dari field WT:)
-        </label>
-        <div class="hint">Biarkan tidak tercentang untuk timbangan ini — parsing WT: sudah otomatis. Centang hanya jika kamu ganti ke timbangan dengan format berbeda.</div>
-      </div>
-      <div class="field">
-        <label for="parseRegex">Pola Manual (dipakai hanya jika dicentang di atas)</label>
-        <input type="text" id="parseRegex" value="(-?\d+\.?\d*)">
-        <div class="hint">Berat default diambil otomatis dari field <code>WT:</code> pada data timbangan.</div>
-      </div>
-
-      <button class="toggle-log" id="toggleLogBtn">Tampilkan data mentah ▾</button>
+      <button class="toggle-log" id="toggleLogBtn">Tampilkan data mentah (debug) ▾</button>
       <div class="log-box" id="logBox" style="display:none;"></div>
     </div>
 
@@ -390,6 +411,11 @@
 
   <!-- RIGHT: live readout + thread selection + verdict + table -->
   <div>
+
+    <div class="field" style="max-width:520px;">
+      <label for="operatorName">Nama Petugas</label>
+      <input type="text" id="operatorName" placeholder="mis. Budi">
+    </div>
 
     <div class="field" style="max-width:520px;">
       <label for="threadSelect">Pilih Jenis Benang (Item Code)</label>
@@ -411,6 +437,11 @@
       </div>
     </div>
 
+    <div class="save-row">
+      <button class="btn-primary" id="btnSaveData" style="width:auto; padding:11px 22px;">Simpan Data</button>
+      <span id="saveConfirm" class="save-confirm"></span>
+    </div>
+
     <div class="verdict idle" id="verdictBox">
       <div>
         <div class="verdict-text" id="verdictText">Pilih jenis benang dan sambungkan timbangan untuk melihat hasil</div>
@@ -420,6 +451,35 @@
     </div>
 
     <div class="spec-grid" id="specGrid"></div>
+
+    <div class="panel" style="margin-bottom:22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <h2 style="margin:0; border:none; padding:0;">Data Tersimpan (<span id="recordCount">0</span>)</h2>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-secondary" id="btnDownloadExcel" style="width:auto; margin-top:0;">Unduh Excel</button>
+          <button class="btn-secondary" id="btnClearData" style="width:auto; margin-top:0; color:var(--red); border-color:#EFC5C1;">Hapus Semua</button>
+        </div>
+      </div>
+      <div class="table-wrap" style="max-height:260px;">
+        <table>
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>Nama</th>
+              <th>Jenis Benang</th>
+              <th>Tanggal</th>
+              <th>Jam</th>
+              <th>Hasil (g)</th>
+              <th>Kategori</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recordsBody">
+            <tr><td colspan="8" style="text-align:center; color:var(--ink-soft); font-family:var(--sans);">Belum ada data tersimpan</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <h2 style="font-size:12px; text-transform:uppercase; letter-spacing:0.7px; color:var(--ink-soft); margin:0 0 10px; font-weight:650;">
       Tabel Referensi Benang
@@ -640,8 +700,8 @@ async function connect(){
     setConnectedUI(true);
     wtEverSeen = false;
     stallWarnTimer = setTimeout(() => {
-      if (!wtEverSeen && !$("useManualPattern").checked){
-        readoutSource.textContent = "Belum ada field WT: terbaca — cek baud rate, atau centang pola manual";
+      if (!wtEverSeen){
+        readoutSource.textContent = "Belum ada field WT: terbaca — cek baud rate/parity di panel kiri";
       }
     }, 5000);
     readLoop();
@@ -679,28 +739,9 @@ let wtEverSeen = false;
 let stallWarnTimer = null;
 
 function processBuffer(buffer){
-  // Manual mode: user explicitly opted out of the WT: auto-parser.
-  if ($("useManualPattern").checked){
-    let re;
-    try{ re = new RegExp($("parseRegex").value, "g"); }catch(e){ return buffer; }
-    const matches = [...buffer.matchAll(re)];
-    if (matches.length === 0){
-      return buffer.length > BUFFER_CAP ? buffer.slice(-BUFFER_CAP) : buffer;
-    }
-    for (const m of matches){
-      let val = parseFloat(m[1] !== undefined ? m[1] : m[0]);
-      if (isNaN(val)) continue;
-      if ($("unit").value === "kg") val *= 1000;
-      appendLog(m[0]);
-      setWeight(val, "timbangan (COM) — pola manual", null);
-    }
-    const last = matches[matches.length - 1];
-    return buffer.slice(last.index + last[0].length);
-  }
-
-  // Automatic mode: only ever act on a COMPLETE "WT:...g" field. If the
-  // buffer just hasn't received that part of the record yet, wait for more
-  // data rather than guessing from whatever numbers happen to be present.
+  // Only ever act on a COMPLETE "WT:...g" field. If the buffer just hasn't
+  // received that part of the record yet, wait for more data rather than
+  // guessing from whatever numbers happen to already be present.
   const wtMatches = [...buffer.matchAll(WT_REGEX)];
 
   if (wtMatches.length === 0){
@@ -756,7 +797,123 @@ btnConnect.addEventListener("click", connect);
 btnDisconnect.addEventListener("click", disconnect);
 
 // ---------------------------------------------------------------
-// 9. Init
+// 9. Saved records (manual "Simpan Data" button, not auto-captured)
+// ---------------------------------------------------------------
+const STORAGE_KEY = "benangScaleRecords";
+let savedRecords = [];
+
+function loadRecords(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    savedRecords = raw ? JSON.parse(raw) : [];
+  }catch(e){
+    savedRecords = [];
+  }
+}
+
+function persistRecords(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(savedRecords));
+  }catch(e){
+    console.error("Gagal menyimpan ke localStorage", e);
+  }
+}
+
+function renderRecords(){
+  $("recordCount").textContent = savedRecords.length;
+  const body = $("recordsBody");
+  if (savedRecords.length === 0){
+    body.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--ink-soft); font-family:var(--sans);">Belum ada data tersimpan</td></tr>`;
+    return;
+  }
+  body.innerHTML = savedRecords.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td style="font-family:var(--sans);">${r.nama || "-"}</td>
+      <td style="font-family:var(--sans);">${r.jenisBenang}</td>
+      <td>${r.tanggal}</td>
+      <td>${r.jam}</td>
+      <td>${r.hasil.toFixed(2)}</td>
+      <td><span class="kategori-pill ${r.kategori === "Memenuhi" ? "memenuhi" : "tidak"}">${r.kategori}</span></td>
+      <td><button class="row-delete" data-idx="${i}" title="Hapus baris ini">✕</button></td>
+    </tr>
+  `).join("");
+}
+
+function saveCurrentReading(){
+  if (lastWeightGram === null){
+    $("saveConfirm").textContent = "Belum ada berat terbaca untuk disimpan";
+    $("saveConfirm").className = "save-confirm show";
+    setTimeout(() => $("saveConfirm").classList.remove("show"), 2500);
+    return;
+  }
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const tanggal = `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`;
+  const jam = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const kategori = lastWeightGram > selectedThread.limit50 ? "Memenuhi" : "Tidak";
+
+  savedRecords.push({
+    nama: $("operatorName").value.trim(),
+    jenisBenang: selectedThread.code,
+    tanggal,
+    jam,
+    hasil: lastWeightGram,
+    kategori,
+  });
+  persistRecords();
+  renderRecords();
+
+  $("saveConfirm").textContent = "Data tersimpan ✓";
+  $("saveConfirm").className = "save-confirm show";
+  setTimeout(() => $("saveConfirm").classList.remove("show"), 2500);
+}
+
+$("btnSaveData").addEventListener("click", saveCurrentReading);
+
+$("recordsBody").addEventListener("click", (e) => {
+  const btn = e.target.closest(".row-delete");
+  if (!btn) return;
+  const idx = Number(btn.dataset.idx);
+  savedRecords.splice(idx, 1);
+  persistRecords();
+  renderRecords();
+});
+
+$("btnClearData").addEventListener("click", () => {
+  if (savedRecords.length === 0) return;
+  if (!confirm("Hapus semua data tersimpan? Tindakan ini tidak bisa dibatalkan.")) return;
+  savedRecords = [];
+  persistRecords();
+  renderRecords();
+});
+
+$("btnDownloadExcel").addEventListener("click", () => {
+  if (savedRecords.length === 0){
+    alert("Belum ada data untuk diunduh.");
+    return;
+  }
+  const rows = savedRecords.map((r, i) => ({
+    "No": i + 1,
+    "Nama": r.nama || "-",
+    "Jenis Benang": r.jenisBenang,
+    "Tanggal Penimbangan": r.tanggal,
+    "Jam Penimbangan": r.jam,
+    "Hasil Penimbangan (g)": r.hasil,
+    "Kategori (Memenuhi / Tidak)": r.kategori,
+  }));
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  sheet["!cols"] = [
+    {wch:5}, {wch:16}, {wch:34}, {wch:18}, {wch:12}, {wch:20}, {wch:22}
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, sheet, "Data Penimbangan");
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(workbook, `data-penimbangan-benang-${stamp}.xlsx`);
+});
+
+// ---------------------------------------------------------------
+// 10. Init
 // ---------------------------------------------------------------
 if (!("serial" in navigator)){
   $("notSupportedBanner").style.display = "block";
@@ -765,6 +922,8 @@ populateThreads();
 highlightActiveRow();
 renderSpecGrid();
 evaluate();
+loadRecords();
+renderRecords();
 </script>
 
 </body>
